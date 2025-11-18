@@ -1,1 +1,571 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>네온 테트리스</title>
+<style>
+:root{
+  --neon-cyan:#00fff0;
+  --neon-pink:#ff00e6;
+  --neon-yellow:#ffd60a;
+  --neon-green:#00ff6a;
+  --neon-red:#ff3b30;
+  --neon-blue:#1e90ff;
+  --neon-purple:#a78bfa;
+  --bg:#0a0a0f;
+}
+html,body{
+  margin:0; height:100%; font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;
+  background: radial-gradient(circle at 50% 50%, #11131a 0%, #1a1a2f 60%, #000020 100%);
+  display:grid; place-items:center; color:#fff;
+}
+canvas#neonBg{
+  position:fixed; inset:0; width:100%; height:100%; z-index:-1;
+}
+.wrap{
+  display:grid; grid-template-columns:auto 180px; gap:16px; align-items:start;
+}
 
+/* ==== Board ==== */
+#board{
+  width:240px; height:480px; background:#0f1119;
+  border:3px solid var(--neon-cyan); border-radius:14px;
+  box-shadow:0 0 24px rgba(0,255,240,.45), inset 0 0 12px rgba(0,255,240,.15);
+  outline:none;
+}
+
+/* ==== Side Panel ==== */
+.panel{
+  width:180px; background:#11121b; border:2px solid var(--neon-pink);
+  box-shadow:0 0 24px rgba(255,0,230,.35), inset 0 0 12px rgba(255,0,230,.08);
+  border-radius:14px; padding:12px;
+}
+.panel h3{
+  margin:0 0 6px; font-weight:700; color:var(--neon-pink);
+  text-shadow:0 0 12px rgba(255,0,230,.8),0 0 24px rgba(255,0,230,.5);
+}
+.stat{font-size:14px;margin:6px 0 12px;text-shadow:0 0 4px rgba(255,255,255,.4);}
+#holdCanvas,#nextCanvas{
+  width:120px;height:120px;display:block;margin:6px auto 4px;background:#0d0f15;
+  border:1px solid #6b7280;border-radius:10px
+}
+.hint{font-size:12px;color:#a5b4fc;opacity:.9;text-align:center}
+#combo{color:var(--neon-cyan);text-shadow:0 0 12px rgba(0,255,240,.8)}
+
+/* ==== Start Screen ==== */
+#startScreen{
+  position:fixed;inset:0;display:grid;place-items:center;
+  background:radial-gradient(800px 600px at 50% 30%,#141622 0%,#0a0a0f 60%,#000 100%);
+  z-index:10
+}
+.start-card{
+  text-align:center;padding:28px 32px;background:rgba(10,12,20,.6);
+  border:2px solid var(--neon-cyan);border-radius:16px;
+  box-shadow:0 0 32px rgba(0,255,240,.45), inset 0 0 24px rgba(0,255,240,.08);
+  backdrop-filter:blur(6px)
+}
+.title{font-size:44px;margin:0 0 12px;color:var(--neon-cyan);letter-spacing:.12em;
+  text-shadow:0 0 16px rgba(0,255,240,.9),0 0 40px rgba(0,255,240,.35)}
+.subtitle{margin:0 0 18px;color:#c7d2fe;opacity:.9}
+.btn{
+  cursor:pointer;border:2px solid var(--neon-pink);color:var(--neon-pink);background:transparent;
+  padding:10px 20px;font-size:16px;border-radius:12px;
+  transition:transform .08s ease,box-shadow .2s ease,background .2s ease,color .2s ease;
+  text-shadow:0 0 8px rgba(255,0,230,.8);box-shadow:0 0 18px rgba(255,0,230,.35)
+}
+.btn:hover{background:var(--neon-pink);color:#000}
+.btn:active{transform:translateY(1px) scale(.99)}
+.controls{margin-top:14px;font-size:13px;color:#e5e7eb;opacity:.95;line-height:1.5}
+.kbd{display:inline-block;border:1px solid #94a3b8;border-radius:6px;padding:1px 6px;margin:0 2px;background:#0b0d14}
+
+/* Pause overlay */
+#pauseOverlay, #gameOverScreen {
+  position:fixed; inset:0; display:grid; place-items:center;
+  background:'rgba(10,10,20,0.6)'; z-index:20; font-family:'ui-sans-serif';
+}
+#pauseOverlay .card{
+  padding:20px 28px; border-radius:12px; text-align:center;
+  background: rgba(5,7,12,0.8); border:2px solid var(--neon-yellow); color:var(--neon-yellow);
+  box-shadow:0 0 20px rgba(255,220,40,0.12);
+}
+</style>
+</head>
+<body>
+
+<canvas id="neonBg"></canvas>
+
+<div id="startScreen">
+  <div class="start-card">
+    <div class="title">NEON TETRIS</div>
+    <p class="subtitle">Classic 10×20 · Hold · Hard Drop · SRS · Combo</p>
+    <button id="startBtn" class="btn">게임 시작</button>
+    <div class="controls">
+      조작: <span class="kbd">←</span><span class="kbd">→</span> 이동 · <span class="kbd">↑</span> 회전 · 
+      <span class="kbd">↓</span> 소프트드롭 · <span class="kbd">Space</span> 하드드롭 · 
+      <span class="kbd">Shift</span> 홀드 · <span class="kbd">P</span> 일시정지
+    </div>
+    <p class="hint">또는 <span class="kbd">Space</span>로 시작</p>
+    <p class="hint">하이스코어: <span id="startHigh">0</span></p>
+  </div>
+</div>
+
+<!-- Pause overlay (hidden by default) -->
+<div id="pauseOverlay" style="display:none; z-index:30">
+  <div class="card"><div style="font-size:40px;font-weight:700">PAUSED</div><div style="margin-top:8px;font-size:14px;opacity:.9">P 누르면 재개</div></div>
+</div>
+
+<div class="wrap">
+  <canvas id="board" width="240" height="480" tabindex="0"></canvas>
+  <aside class="panel">
+    <h3>HOLD</h3>
+    <canvas id="holdCanvas" width="120" height="120"></canvas>
+    <div class="hint">Shift = Hold</div>
+
+    <h3>NEXT</h3>
+    <canvas id="nextCanvas" width="120" height="120"></canvas>
+
+    <h3>POINTS</h3>
+    <div class="stat">점수: <span id="score">0</span></div>
+
+    <h3>COMBO</h3>
+    <div class="stat">콤보: <span id="combo">0</span></div>
+
+    <h3>TIME</h3>
+    <div class="stat" id="time">시간: 0초</div>
+
+    <h3>HIGH</h3>
+    <div class="stat">하이스코어: <span id="highscore">0</span></div>
+  </aside>
+</div>
+<script>
+// ===== Neon Background =====
+const bgCanvas = document.getElementById('neonBg');
+const bg = bgCanvas.getContext('2d');
+
+function resizeBg() {
+  bgCanvas.width = window.innerWidth;
+  bgCanvas.height = window.innerHeight;
+}
+resizeBg();
+window.addEventListener('resize', resizeBg);
+
+const gridSize = 50;
+function drawBgGrid() {
+  bg.clearRect(0,0,bgCanvas.width,bgCanvas.height);
+  bg.strokeStyle = 'rgba(0,255,255,0.25)';
+  bg.shadowColor = 'rgba(0,255,255,0.35)';
+  bg.shadowBlur = 12;
+  bg.lineWidth = 1;
+  for(let x=0;x<bgCanvas.width;x+=gridSize){
+    bg.beginPath(); bg.moveTo(x,0); bg.lineTo(x,bgCanvas.height); bg.stroke();
+  }
+  for(let y=0;y<bgCanvas.height;y+=gridSize){
+    bg.beginPath(); bg.moveTo(0,y); bg.lineTo(bgCanvas.width,y); bg.stroke();
+  }
+}
+
+const starColors = ['#00fff0','#ff00e6','#ffd60a','#1e90ff','#a78bfa'];
+const particles = Array.from({length:150}, () => ({
+  x: Math.random()*window.innerWidth,
+  y: Math.random()*window.innerHeight,
+  r: Math.random()*2+1.5,
+  vx:(Math.random()-0.5)*0.3,
+  vy:(Math.random()-0.5)*0.3,
+  color: starColors[Math.floor(Math.random()*starColors.length)],
+  alpha: Math.random()*0.4+0.3
+}));
+
+function drawParticles() {
+  for(const p of particles){
+    p.x += p.vx; p.y += p.vy;
+    if(p.x<0)p.x=bgCanvas.width; if(p.x>bgCanvas.width)p.x=0;
+    if(p.y<0)p.y=bgCanvas.height; if(p.y>bgCanvas.height)p.y=0;
+    bg.fillStyle=p.color; bg.globalAlpha=p.alpha;
+    bg.shadowColor=p.color; bg.shadowBlur=14;
+    bg.beginPath(); bg.arc(p.x,p.y,p.r,0,Math.PI*2); bg.fill();
+  }
+  bg.globalAlpha=1;
+}
+
+(function animateBackground() {
+  drawBgGrid();
+  drawParticles();
+  requestAnimationFrame(animateBackground);
+})();
+
+// ===== TETRIS JS =====
+const board = document.getElementById('board');
+const ctx = board.getContext('2d');
+const CELL = 24; 
+ctx.scale(CELL, CELL);
+
+const holdCanvas = document.getElementById('holdCanvas'); 
+const holdCtx = holdCanvas.getContext('2d');
+const nextCanvas = document.getElementById('nextCanvas'); 
+const nextCtx = nextCanvas.getContext('2d');
+const scoreEl = document.getElementById('score'); 
+const comboEl = document.getElementById('combo');
+const timeEl = document.getElementById('time'); // 시간 표시
+const startScreen = document.getElementById('startScreen'); 
+const startBtn = document.getElementById('startBtn');
+const pauseOverlay = document.getElementById('pauseOverlay');
+const highEl = document.getElementById('highscore');
+const startHighEl = document.getElementById('startHigh');
+
+const WIDTH = 10, HEIGHT = 20;
+const arena = Array.from({length:HEIGHT},()=>Array(WIDTH).fill(0));
+
+let player = {pos:{x:0,y:0}, matrix:null, next:null};
+let score = 0, combo = 0, lastTime = 0, dropCounter = 0, dropInterval = 500, running = false;
+let elapsedTime = 0; // 시간 누적
+let holdMatrix = null, canHold = true;
+let softLock = false, softLockTimer = 0;
+let paused = false;
+const clearAnim = {active:false, lines:[], t:0, particles:[], awarded:false};
+const colors = [null,'#00fff0','#ff00e6','#ffd60a','#00ff6a','#ff3b30','#1e90ff','#a78bfa'];
+
+let highscore = parseInt(localStorage.getItem('neonTetrisHigh')||'0',10);
+highEl.textContent = highscore;
+startHighEl.textContent = highscore;
+
+// ===== Pieces =====
+function createPiece(t){
+  switch(t){
+    case 'T': return [[0,0,0],[1,1,1],[0,1,0]];
+    case 'O': return [[2,2],[2,2]];
+    case 'L': return [[0,3,0],[0,3,0],[0,3,3]];
+    case 'J': return [[0,4,0],[0,4,0],[4,4,0]];
+    case 'I': return [[0,5,0,0],[0,5,0,0],[0,5,0,0],[0,5,0,0]];
+    case 'S': return [[0,6,6],[6,6,0],[0,0,0]];
+    case 'Z': return [[7,7,0],[0,7,7],[0,0,0]];
+  }
+}
+let bag = [];
+function nextPiece(){
+  if(!bag.length){ 
+    bag = 'TJLOSZI'.split(''); 
+    bag.sort(()=>Math.random()-0.5); 
+  }
+  return createPiece(bag.pop());
+}
+
+// ===== Utils =====
+function collide(arena, player){
+  const m = player.matrix, o = player.pos;
+  for(let y=0;y<m.length;y++){
+    for(let x=0;x<m[y].length;x++){
+      if(m[y][x]!==0){
+        const ay = y+o.y, ax = x+o.x;
+        if(ay>=arena.length || ax<0 || ax>=arena[0].length) return true;
+        if(ay>=0 && arena[ay][ax]!==0) return true;
+      }
+    }
+  }
+  return false;
+}
+function merge(arena,player){
+  player.matrix.forEach((row,y)=>{
+    row.forEach((v,x)=>{ if(v!==0) arena[y+player.pos.y][x+player.pos.x]=v; });
+  });
+}
+function getFullLines(){
+  const lines=[];
+  outer: for(let y=HEIGHT-1;y>=0;y--){
+    for(let x=0;x<WIDTH;x++) if(arena[y][x]===0) continue outer;
+    lines.push(y);
+  }
+  return lines;
+}
+
+// ===== Spawn / Reset =====
+function playerReset(){
+  player.matrix = player.next || nextPiece();
+  player.next = nextPiece();
+  player.pos.y = 0;
+  player.pos.x = (WIDTH>>1) - ((player.matrix[0].length)>>1);
+  canHold = true; softLock = false; softLockTimer = 0;
+  if(collide(arena, player)) gameOver();
+  drawNext(); drawHold();
+}
+
+// ===== Game Over =====
+function gameOver(){ running=false; showGameOverScreen(); }
+function showGameOverScreen(){
+  const existing = document.getElementById('gameOverScreen');
+  if(existing) existing.remove();
+  const div = document.createElement('div');
+  div.id='gameOverScreen';
+  Object.assign(div.style,{
+    position:'fixed', inset:0, display:'grid', placeItems:'center',
+    background:'rgba(10,10,20,0.95)', color:'#00fff0', zIndex:40, fontFamily:'ui-sans-serif', textAlign:'center'
+  });
+  div.innerHTML = `
+    <h1 style="font-size:48px; margin:0 0 12px; text-shadow:0 0 16px #00fff0">GAME OVER</h1>
+    <p style="font-size:20px; margin:0 0 8px">점수: ${score}</p>
+    <p style="font-size:16px; margin:0 0 12px">하이스코어: ${highscore}</p>
+    <button id="restartBtn" style="
+      padding:10px 20px; font-size:18px; border:2px solid #ff00e6;
+      background:transparent; color:#ff00e6; border-radius:12px; cursor:pointer;
+      text-shadow:0 0 8px #ff00e6; box-shadow:0 0 18px rgba(255,0,230,.35);
+    ">다시 시작</button>
+  `;
+  document.body.appendChild(div);
+  document.getElementById('restartBtn').addEventListener('click',()=>{
+    div.remove(); arena.forEach(r=>r.fill(0)); score=0; combo=0; elapsedTime=0; updateScore();
+    running=true; lastTime = performance.now(); playerReset(); update(lastTime);
+  });
+  // highscore 저장 (gameOver 때도 확인)
+  if(score > highscore){ highscore = score; localStorage.setItem('neonTetrisHigh', String(highscore)); highEl.textContent = highscore; startHighEl.textContent = highscore; }
+}
+
+// ===== Movement / Drop =====
+function playerMove(d){ 
+  if(clearAnim.active || paused) return; 
+  player.pos.x += d; 
+  if(collide(arena,player)) player.pos.x -= d; 
+  else if(softLock) softLockTimer = 0; 
+}
+function rotateMatrix(m){ for(let y=0;y<m.length;y++) for(let x=0;x<y;x++) [m[x][y],m[y][x]]=[m[y][x],m[x][y]]; m.forEach(r=>r.reverse()); }
+const kicks={normal:[[0,0],[-1,0],[1,0],[0,-1],[-1,-1],[1,-1]], I:[[0,0],[-2,0],[1,0],[-2,-1],[1,2]]};
+function playerRotate(){
+  if(clearAnim.active || paused) return;
+  const m = player.matrix, ox = player.pos.x, oy = player.pos.y;
+  rotateMatrix(m);
+  const table = (m.length === 4) ? kicks.I : kicks.normal;
+  let rotated = false;
+  for(const [kx, ky] of table){
+    player.pos.x = ox + kx; player.pos.y = oy + ky;
+    if(!collide(arena, player)){ rotated = true; break; }
+  }
+  if(!rotated){ rotateMatrix(m); rotateMatrix(m); rotateMatrix(m); player.pos.x = ox; player.pos.y = oy; }
+  else if(softLock) softLockTimer = 0; 
+}
+
+function softDrop(){ 
+  if(clearAnim.active || paused) return; 
+  player.pos.y++; 
+  if(collide(arena, player)){ player.pos.y--; startSoftLock(); } 
+  dropCounter = 0; 
+}
+function hardDrop(){ 
+  if(clearAnim.active || paused) return; 
+  while(!collide(arena,player)) player.pos.y++; 
+  player.pos.y--; lockPiece(); 
+}
+
+function startSoftLock(){ if(!softLock){ softLock = true; softLockTimer = 0; } }
+function cancelSoftLockIfFloating(){ if(!softLock) return; player.pos.y++; const c = collide(arena, player); player.pos.y--; if(!c){ softLock = false; softLockTimer = 0; } }
+
+// ===== Lock / Clear =====
+function lockPiece(){
+  merge(arena,player);
+  const lines = getFullLines();
+  if(lines.length) startClearAnimation(lines); else { combo=0; updateScore(); }
+  playerReset();
+}
+function startClearAnimation(lines){ clearAnim.active=true; clearAnim.lines = lines.slice().sort((a,b)=>a-b); clearAnim.t=0; clearAnim.particles=[]; clearAnim.awarded=false; }
+function finishClearAnimation(){
+  const n = clearAnim.lines.length;
+  clearAnim.lines.sort((a,b)=>a-b).forEach((y,i)=> arena.splice(y-i,1));
+  for(let i=0;i<n;i++) arena.unshift(Array(WIDTH).fill(0));
+  const points=[0,100,300,500,800];
+  score += points[n] + (combo+1)*50; combo = (n>0)? combo+1:0; updateScore();
+  clearAnim.active=false; clearAnim.lines.length=0; clearAnim.particles.length=0; clearAnim.t=0; clearAnim.awarded=true;
+}
+
+// ===== Hold / Next =====
+function hold(){ 
+  if(clearAnim.active || !canHold || paused) return;
+  if(!holdMatrix){ holdMatrix=player.matrix; playerReset(); }
+  else{ const tmp=player.matrix; player.matrix=holdMatrix; holdMatrix=tmp; player.pos.y=0; player.pos.x=(WIDTH>>1)-((player.matrix[0].length)>>1); if(collide(arena,player)){ player.matrix=tmp; player.pos.x=(WIDTH>>1)-((player.matrix[0].length)>>1); } }
+  canHold=false; drawHold();
+}
+function drawHold(){
+  const s=12;
+  holdCtx.setTransform(1,0,0,1,0,0);
+  holdCtx.clearRect(0,0,holdCanvas.width,holdCanvas.height);
+  holdCtx.fillStyle='#0d0f15'; holdCtx.fillRect(0,0,holdCanvas.width,holdCanvas.height);
+  holdCtx.strokeStyle='#6b7280'; holdCtx.strokeRect(0.5,0.5,holdCanvas.width-1,holdCanvas.height-1);
+  if(!holdMatrix) return;
+  holdCtx.save(); holdCtx.scale(s,s);
+  const vw=holdCanvas.width/s, vh=holdCanvas.height/s;
+  const offX=(vw-holdMatrix[0].length)/2, offY=(vh-holdMatrix.length)/2;
+  drawMatrix(holdCtx,holdMatrix,{x:offX,y:offY});
+  holdCtx.restore();
+}
+function drawNext(){
+  const s=12;
+  nextCtx.setTransform(1,0,0,1,0,0);
+  nextCtx.clearRect(0,0,nextCanvas.width,nextCanvas.height);
+  nextCtx.fillStyle='#0d0f15'; nextCtx.fillRect(0,0,nextCanvas.width,nextCanvas.height);
+  nextCtx.strokeStyle='#6b7280'; nextCtx.strokeRect(0.5,0.5,nextCanvas.width-1,nextCanvas.height-1);
+  if(!player.next) return;
+  nextCtx.save(); nextCtx.scale(s,s);
+  const vw=nextCanvas.width/s, vh=nextCanvas.height/s;
+  const offX=(vw-player.next[0].length)/2, offY=(vh-player.next.length)/2;
+  drawMatrix(nextCtx,player.next,{x:offX,y:offY});
+  nextCtx.restore();
+}
+
+// ===== Drawing =====
+function drawMatrix(targetCtx,matrix,offset, opts = {}){
+  matrix.forEach((row,y)=>{
+    row.forEach((v,x)=>{
+      if(v!==0){
+        if(opts.alpha !== undefined) targetCtx.globalAlpha = opts.alpha;
+        targetCtx.fillStyle=colors[v];
+        targetCtx.fillRect(x+offset.x,y+offset.y,1,1);
+        targetCtx.strokeStyle='rgba(0,0,0,.3)';
+        targetCtx.lineWidth=0.05;
+        targetCtx.strokeRect(x+offset.x,y+offset.y,1,1);
+        if(opts.alpha !== undefined) targetCtx.globalAlpha = 1;
+      }
+    });
+  });
+}
+function drawGrid(){
+  ctx.strokeStyle='rgba(0,255,255,.25)';
+  ctx.lineWidth=0.03;
+  for(let x=0;x<=WIDTH;x++){ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,HEIGHT); ctx.stroke();}
+  for(let y=0;y<=HEIGHT;y++){ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(WIDTH,y); ctx.stroke();}
+}
+function drawBoard(){
+  ctx.setTransform(CELL,0,0,CELL,0,0);
+  ctx.fillStyle='#0d0f15';
+  ctx.fillRect(0,0,board.width,board.height);
+
+  // ghost
+  drawGhost();
+
+  drawMatrix(ctx,arena,{x:0,y:0});
+  drawMatrix(ctx,player.matrix,player.pos);
+  drawGrid();
+}
+function drawGhost(){
+  // compute drop position for ghost
+  const ghost = JSON.parse(JSON.stringify(player.matrix));
+  const pos = {x:player.pos.x, y:player.pos.y};
+  while(true){
+    pos.y++;
+    let collision = false;
+    for(let y=0;y<ghost.length;y++){
+      for(let x=0;x<ghost[y].length;x++){
+        if(ghost[y][x]!==0){
+          const ay = y+pos.y, ax = x+pos.x;
+          if(ay>=arena.length || ax<0 || ax>=arena[0].length){ collision = true; break; }
+          if(ay>=0 && arena[ay][ax]!==0){ collision = true; break; }
+        }
+      }
+      if(collision) break;
+    }
+    if(collision){ pos.y--; break; }
+  }
+  // draw ghost with low alpha
+  drawMatrix(ctx,ghost,pos,{alpha:0.25});
+}
+
+function drawClearAnimation(dt){
+  if(!clearAnim.active) return;
+  clearAnim.t+=dt;
+  const flashPeriod=70;
+  const flashes=Math.floor(clearAnim.t/flashPeriod);
+  const on=flashes%2;
+  if(flashes<=5){
+    clearAnim.lines.forEach(y=>{
+      if(on){
+        ctx.fillStyle='rgba(0,255,255,0.5)';
+        ctx.fillRect(0,y,WIDTH,1);
+      }
+    });
+  }else finishClearAnimation();
+}
+
+// ===== Score + Time =====
+function updateScore(){
+  scoreEl.textContent=score;
+  comboEl.textContent=combo;
+  timeEl.textContent = Math.floor(elapsedTime/1000) + 's';
+}
+
+// ===== Game Loop =====
+function update(time = performance.now()){
+  if(!running) return;
+  const dt = time - lastTime;
+  lastTime = time;
+
+  if(!paused){
+    elapsedTime += dt;
+    dropCounter += dt;
+    if(dropCounter > dropInterval){
+      player.pos.y++;
+      if(collide(arena,player)){ player.pos.y--; startSoftLock(); }
+      dropCounter=0;
+    }
+
+    if(softLock){
+      softLockTimer += dt;
+      if(softLockTimer > 1500){ lockPiece(); softLock=false; softLockTimer=0; }
+    }
+  } else {
+    // if paused, avoid advancing timers; keep lastTime fresh so resume won't get large dt
+  }
+
+  drawBoard();
+  drawClearAnimation(dt);
+  updateScore();
+
+  requestAnimationFrame(update);
+}
+
+// ===== Input =====
+document.addEventListener('keydown', e=>{
+  if(e.code==='Space') e.preventDefault();
+  if(e.code === 'KeyP'){ togglePause(); return; }
+  if(!running) return;
+  switch(e.code){
+    case 'ArrowLeft': e.preventDefault(); playerMove(-1); break;
+    case 'ArrowRight': e.preventDefault(); playerMove(1); break;
+    case 'ArrowUp': e.preventDefault(); playerRotate(); break;
+    case 'ArrowDown': e.preventDefault(); softDrop(); break;
+    case 'Space': hardDrop(); break;
+    case 'ShiftLeft':
+    case 'ShiftRight': hold(); break;
+  }
+});
+
+// Pause toggle
+function togglePause(){
+  if(!running) return;
+  paused = !paused;
+  pauseOverlay.style.display = paused ? 'grid' : 'none';
+  // keep lastTime updated so dt doesn't jump on resume
+  lastTime = performance.now();
+}
+
+// ===== Start =====
+function startGame(){
+  running = true;
+  paused = false;
+  pauseOverlay.style.display = 'none';
+  startScreen.style.display='none';
+  lastTime = performance.now();
+  elapsedTime = 0;
+  playerReset();
+  update();
+}
+
+startBtn.addEventListener('click', startGame);
+document.addEventListener('keydown', e=>{
+  if(e.code==='Space' && !running){ e.preventDefault(); startGame(); }
+});
+
+// ===== Highscore update point (also saved at game over) =====
+// We already save when game over occurs. But also save if player quits or refreshes with higher score:
+window.addEventListener('beforeunload', ()=>{
+  if(score > highscore) localStorage.setItem('neonTetrisHigh', String(score));
+});
+
+</script>
+</body>
+</html>

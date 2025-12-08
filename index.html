@@ -508,9 +508,8 @@ function update(time = performance.now()){
       if(softLockTimer > 1500){ lockPiece(); softLock=false; softLockTimer=0; }
     }
   } else {
-    // if paused, avoid advancing timers; keep lastTime fresh so resume won't get large dt
+    // if paused, avoid advancing timers; keep lastTime fresh so resume won't get largeTimㄹ
   }
-
   drawBoard();
   drawClearAnimation(dt);
   updateScore();
